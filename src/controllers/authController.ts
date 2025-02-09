@@ -2,39 +2,64 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { supabase } from "../supabase/supabaseClient";
+import { randomUUID } from "crypto";
 
 const SECRET = process.env.JWT_SECRET || "default_secret";
+const SALT_ROUNDS = 10;
 
 export const signup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-  const { email, password } = req.body;
+  const { email, password, first_name, last_name, user_name, title, description, profile_image, is_GDC } = req.body;
 
   try {
-    const { data: existingUser } = await supabase
+    const { data: existingUsers, error: userCheckError } = await supabase
       .from("users")
-      .select("*")
-      .eq("email", email)
-      .single();
+      .select("id")
+      .eq("email", email);
 
-    if (existingUser) {
+    if (userCheckError) {
+      console.error("Error checking existing user:", userCheckError.message);
+      res.status(500).json({ message: "Error checking existing user" });
+      return;
+    }
+
+    if (existingUsers.length > 0) {
       res.status(400).json({ message: "User already exists" });
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const userId = randomUUID(); 
 
-    const { data: newUser, error } = await supabase
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+    const { data, error: dbError } = await supabase
       .from("users")
-      .insert([{ email, password: hashedPassword }])
+      .insert([
+        {
+          id: userId, 
+          email,
+          password: hashedPassword,  
+          first_name,
+          last_name,
+          user_name,
+          title,
+          description,
+          profile_image,
+          is_GDC,
+        },
+      ])
       .select()
       .single();
 
-    if (error) throw error;
+    if (dbError) {
+      res.status(400).json({ message: dbError.message });
+      return;
+    }
 
-    const token = jwt.sign({ id: newUser.id, email: newUser.email }, SECRET, {
+    const token = jwt.sign({ id: userId, email }, SECRET, {
       expiresIn: "1h",
     });
 
-    res.status(201).json({ token, user: newUser });
+    res.status(201).json({ token, user: data });
   } catch (error) {
     next(error);
   }
@@ -67,6 +92,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
     res.status(200).json({ token, user });
   } catch (error) {
+    console.error("Login error:", error);
     next(error);
   }
 };
