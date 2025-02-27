@@ -3,6 +3,7 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes";
 import { CustomError } from "./types/customError";
+import nfcRoutes from "./routes/nfcRoutes";
 
 dotenv.config();
 
@@ -28,6 +29,9 @@ app.use((err: CustomError, req: Request, res: Response, next: NextFunction) => {
       }
     });
 });
+
+app.use("/nfc", nfcRoutes);
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

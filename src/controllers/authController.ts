@@ -96,3 +96,44 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     next(error);
   }
 };
+
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { email, token, newPassword } = req.body;
+
+  try {
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .single();
+
+    if (error || !user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.reset_token || !user.reset_expires || user.reset_expires < Date.now()) {
+      return res.status(400).json({ message: "Reset token is invalid or expired" });
+    }
+
+    const isTokenValid = await bcrypt.compare(token, user.reset_token);
+    if (!isTokenValid) {
+      return res.status(400).json({ message: "Invalid reset token" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await supabase
+      .from("users")
+      .update({
+        password: hashedPassword,
+        reset_token: null,
+        reset_expires: null,
+      })
+      .eq("email", email);
+
+    res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
