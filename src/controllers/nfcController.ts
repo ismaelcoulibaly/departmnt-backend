@@ -9,51 +9,48 @@ interface NfcResponse {
 }
 
 export const verifyNfc = async (req: Request, res: Response<NfcResponse>): Promise<void> => {
-  const { nfc_uid } = req.params;
-
-  try {
-    const { data: nfcTag, error } = await supabase
-      .from("nfc_tags")
-      .select("*")
-      .eq("nfc_uid", nfc_uid)
-      .single();
-
-    if (error || !nfcTag) {
+    const { nfc_uid } = req.params;
+  
+    try {
+      const { data: nfcTag, error } = await supabase
+        .from("nfc_tags")
+        .select("*")
+        .eq("nfc_uid", nfc_uid)
+        .single();
+  
+      if (error || !nfcTag) {
         res.status(404).json({ message: "NFC tag not registered" });
         return;
       }
   
-      const response: NfcResponse = {
-        message: "NFC verified",
-        nfcTag,
-      };
-  
-      if (nfcTag.linked_product_id) {
-        const { data: product } = await supabase
-          .from("products")
-          .select("*")
-          .eq("id", nfcTag.linked_product_id)
-          .single();
-  
-        if (product) response.product = product;
+      if (!nfcTag.linked_user_id) {
+        res.redirect(`https://your-flutterflow-app.com/login?uid=${nfc_uid}`);
+        return;
       }
   
-      if (nfcTag.linked_user_id) {
-        const { data: user } = await supabase
-          .from("users")
-          .select("id, email, first_name, last_name")
-          .eq("id", nfcTag.linked_user_id)
-          .single();
-  
-        if (user) response.owner = user;
+      switch (nfcTag.type) {
+        case "LNK-UP":
+          res.redirect(`https://your-api.com/lnk-up/${nfcTag.linked_user_id}`);
+          return;
+        case "EXTERNAL":
+          res.redirect(nfcTag.external_url);
+          return;
+        case "INTERNAL":
+          res.redirect(`https://your-flutterflow-app.com/content/${nfcTag.linked_product_id}`);
+          return;
+        case "DEPT_IDENTITY":
+          res.redirect(`https://your-flutterflow-app.com/product/${nfcTag.linked_product_id}`);
+          return;
+        default:
+          res.status(400).json({ message: "Unknown NFC type" });
+          return;
       }
+    } catch (error) {
+      console.error("NFC Verification Error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  };
   
-    res.json(response); 
-  } catch (error) {
-    console.error("NFC Verification Error:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
 
 
 export const claimNfc = async (req: Request, res: Response) => {
